@@ -435,12 +435,28 @@ const active  = {};   // id → { gainNode, analyser, stop }
 // ─── Audio context ───────────────────────────────────────────────────────────
 let audioUnlocked = false;
 
+// Hidden <audio> element used to keep iOS in "playback" audio session so
+// sound routes to the speaker even when the mute switch is on.
+let speakerAudioEl = null;
+
 function getCtx() {
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = actx.createGain();
     masterGain.gain.value = masterVol / 100;
+    // Always send to the default destination (needed for visualiser, etc.)
     masterGain.connect(actx.destination);
+    // On iOS, Web Audio alone uses the "ambient" audio session which obeys
+    // the mute switch. Route the master output *also* through a
+    // MediaStreamDestination → <audio> element, which forces iOS into the
+    // "playback" session so audio comes out of the speaker.
+    try {
+      const streamDest = actx.createMediaStreamDestination();
+      masterGain.connect(streamDest);
+      speakerAudioEl = document.createElement('audio');
+      speakerAudioEl.setAttribute('playsinline', '');
+      speakerAudioEl.srcObject = streamDest.stream;
+    } catch (_) { /* MediaStream not supported – fall back to default */ }
   }
   if (actx.state === 'suspended') actx.resume();
   return actx;
@@ -450,24 +466,17 @@ function getCtx() {
 // a user gesture. We create the AudioContext and play a silent buffer on the
 // very first interaction, then pre-generate noise buffers so they're ready
 // before the user taps a sound card.
-//
-// iOS also defaults Web Audio to the "ambient" audio session, which respects
-// the mute switch and may not route to the speaker. Playing a silent clip
-// through an <audio> element first switches iOS to "playback" mode so audio
-// comes out of the speaker even when the mute switch is on.
 function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;  // set immediately to avoid re-entry
 
-  // Switch iOS audio session from "ambient" to "playback" so audio
-  // plays through the speaker regardless of the mute switch.
-  try {
-    const silentDataURI = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqpAAAAAAD/+1DEAAAHAAGf9AAAIiMKLr80YAAAABBBR//LOCAIAgGP/4PkHP/B8HwfB8oCAIHJOD5//y4Pn/5cHwfB8HwfKAgCAJ8u/8uD4f/lAfD/+XB8HwfB8HygIAgCfLg+D7////////84PvDCYFBQMKAgMFBx4eCAgOJ2/hAEDg+sHF7f/ygY7/8oKBzsHy4ff/6gHO//WA53/5QDnf/0g5QAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//tQxB4AAAANIH/AAAAAANIH/AAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ';
-    const audio = new Audio(silentDataURI);
-    audio.play().catch(() => {});
-  } catch (_) {}
-
   const a = getCtx();
+
+  // Start the hidden <audio> element (must happen inside a user gesture)
+  if (speakerAudioEl) {
+    speakerAudioEl.play().catch(() => {});
+  }
+
   // Play a silent buffer to fully unlock the AudioContext on iOS
   const buf = a.createBuffer(1, 1, a.sampleRate);
   const src = a.createBufferSource();
