@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baby Sounds</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #0a0a14;
+      background-image:
+        radial-gradient(ellipse at 20% 20%, rgba(236,72,153,.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(99,102,241,.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 0%,  rgba(16,185,129,.08) 0%, transparent 40%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #e2e8f0;
+    }
+
+    /* Screen dimmer wrapper — brightness filter lives here */
+    #screen-wrap {
+      filter: brightness(var(--dim, 1));
+      transition: filter 0.6s ease;
+      padding: 28px 20px 48px;
+    }
+
+    /* Dim hint is outside #screen-wrap so it stays bright */
+    #dim-hint {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.7);
+      color: rgba(255,255,255,.85);
+      font-size: .78rem;
+      font-weight: 600;
+      letter-spacing: .5px;
+      padding: 10px 20px;
+      border-radius: 24px;
+      pointer-events: auto;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity .4s;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #dim-hint.visible { opacity: 1; }
+
+    .page {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── Header ── */
+    header { text-align: center; }
+    h1 {
+      font-size: 2.6rem;
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      background: linear-gradient(120deg, #f9a8d4 0%, #c084fc 40%, #67e8f9 100%);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .subtitle { font-size: .88rem; color: rgba(255,255,255,.35); letter-spacing: .4px; }
+
+    /* ── Presets ── */
+    .presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .preset-btn {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 20px;
+      color: rgba(255,255,255,.7);
+      font-size: .8rem;
+      font-weight: 700;
+      padding: 7px 16px;
+      cursor: pointer;
+      transition: all .2s;
+      outline: none;
+      letter-spacing: .3px;
+    }
+    .preset-btn:hover {
+      background: rgba(255,255,255,.12);
+      color: #fff;
+      border-color: rgba(255,255,255,.25);
+    }
+    .preset-btn.active {
+      background: rgba(192,132,252,.18);
+      border-color: #c084fc;
+      color: #c084fc;
+    }
+
+    /* ── Sound Grid ── */
+    .sound-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .sound-card {
+      --c1: #fff; --c2: #fff;
+      position: relative;
+      border-radius: 20px;
+      padding: 20px 10px 12px;
+      border: 2px solid rgba(255,255,255,.07);
+      background: rgba(255,255,255,.03);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      transition: border-color .25s, box-shadow .25s, transform .2s;
+      overflow: hidden;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .sound-card:focus-visible {
+      outline: 2px solid var(--c1);
+      outline-offset: 2px;
+    }
+    .card-bg {
+      position: absolute; inset: 0;
+      background: linear-gradient(145deg, var(--c1), var(--c2));
+      opacity: 0; transition: opacity .3s; border-radius: 18px;
+    }
+    .sound-card:hover .card-bg { opacity: .09; }
+    .sound-card.active .card-bg { opacity: .2; }
+    .sound-card.active {
+      border-color: var(--c1);
+      box-shadow: 0 0 28px -6px var(--c1), 0 8px 24px rgba(0,0,0,.5);
+      transform: translateY(-3px);
+    }
+    .sound-card:hover:not(.active) {
+      border-color: rgba(255,255,255,.16);
+      transform: translateY(-1px);
+    }
+    .card-icon {
+      font-size: 2.2rem; line-height: 1;
+      position: relative; z-index: 1;
+    }
+    .sound-card.active .card-icon {
+      filter: drop-shadow(0 0 10px var(--c1));
+      animation: float 2.8s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0) scale(1); }
+      50%      { transform: translateY(-5px) scale(1.06); }
+    }
+    .card-label {
+      font-size: .7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .7px;
+      color: rgba(255,255,255,.5);
+      position: relative; z-index: 1;
+    }
+    .sound-card.active .card-label { color: #fff; }
+    .card-pip {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--c1); box-shadow: 0 0 10px var(--c1);
+      opacity: 0; position: relative; z-index: 1;
+      transition: opacity .2s;
+    }
+    .sound-card.active .card-pip {
+      opacity: 1;
+      animation: pip-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pip-pulse {
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.6); opacity: .5; }
+    }
+    /* Visualizer bar */
+    .card-viz {
+      width: 80%; height: 3px;
+      background: rgba(255,255,255,.08);
+      border-radius: 2px; overflow: hidden;
+      position: relative; z-index: 1;
+    }
+    .card-viz-bar {
+      height: 100%;
+      background: var(--c1);
+      border-radius: 2px;
+      transform-origin: left;
+      transform: scaleX(0);
+      box-shadow: 0 0 6px var(--c1);
+    }
+
+    /* ── Mixer ── */
+    .mixer {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 24px;
+      padding: 18px 20px 16px;
+    }
+    .section-label {
+      font-size: .65rem; font-weight: 800;
+      letter-spacing: 2.5px; text-transform: uppercase;
+      color: rgba(255,255,255,.25);
+      display: block; margin-bottom: 14px;
+    }
+    .mix-row {
+      display: grid;
+      grid-template-columns: 22px 78px 1fr 38px;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 4px;
+      border-radius: 10px;
+      transition: background .15s;
+    }
+    .mix-row:hover { background: rgba(255,255,255,.03); }
+    .mix-row.mix-inactive { opacity: .38; }
+    .mix-row.mix-master {
+      border-top: 1px solid rgba(255,255,255,.07);
+      margin-top: 8px; padding-top: 13px;
+      opacity: 1 !important;
+    }
+    .mix-icon { font-size: 1rem; text-align: center; line-height: 1; }
+    .mix-label { font-size: .72rem; font-weight: 600; color: rgba(255,255,255,.55); white-space: nowrap; }
+    .mix-row.mix-master .mix-label { color: rgba(255,255,255,.75); }
+    .mix-val { font-size: .68rem; font-weight: 700; color: var(--fader-color); text-align: right; }
+
+    /* Range sliders */
+    input[type="range"].fader {
+      -webkit-appearance: none;
+      width: 100%; height: 4px; border-radius: 4px;
+      background: rgba(255,255,255,.1);
+      outline: none; cursor: pointer;
+      background-image: linear-gradient(var(--fader-color,#a78bfa),var(--fader-color,#a78bfa));
+      background-repeat: no-repeat;
+    }
+    input[type="range"].fader::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--fader-color,#a78bfa);
+      box-shadow: 0 0 10px var(--fader-color,#a78bfa);
+      cursor: pointer; transition: transform .15s;
+    }
+    input[type="range"].fader::-webkit-slider-thumb:hover { transform: scale(1.3); }
+    input[type="range"].fader::-moz-range-thumb {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--fader-color,#a78bfa);
+      box-shadow: 0 0 8px var(--fader-color,#a78bfa);
+      border: none; cursor: pointer;
+    }
+
+    /* BPM row */
+    .bpm-inline {
+      grid-column: 2 / 5;
+      display: flex; align-items: center; gap: 8px;
+      padding: 3px 0 2px;
+    }
+    .bpm-track-label {
+      font-size: .62rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: rgba(255,255,255,.3); white-space: nowrap;
+    }
+    .bpm-stepper { display: flex; align-items: center; gap: 4px; }
+    .bpm-btn {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.15);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.8); font-size: 1rem; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all .15s; outline: none; padding: 0 0 1px; flex-shrink: 0;
+    }
+    .bpm-btn:hover { background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.35); }
+    .bpm-num {
+      font-size: .85rem; font-weight: 800;
+      color: var(--fader-color,#fff);
+      min-width: 26px; text-align: center;
+    }
+    .bpm-range-slider { flex: 1; }
+
+    /* ── Footer ── */
+    .footer { display: flex; flex-direction: column; gap: 10px; }
+    .timer-row, .dim-row {
+      display: flex; align-items: center;
+      gap: 8px; flex-wrap: wrap;
+    }
+    .row-label {
+      font-size: .65rem; font-weight: 800;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: rgba(255,255,255,.25); min-width: 40px;
+    }
+    .t-btn {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 20px; color: rgba(255,255,255,.55);
+      font-size: .78rem; font-weight: 700;
+      padding: 5px 14px; cursor: pointer;
+      transition: all .18s; outline: none;
+    }
+    .t-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+    .t-btn.active { background: rgba(192,132,252,.18); border-color: #c084fc; color: #c084fc; }
+    .timer-count {
+      font-size: .78rem; font-weight: 700;
+      color: #fbbf24; letter-spacing: 1.5px; min-width: 44px;
+    }
+
+    /* Dim controls */
+    #dim-btn {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 20px; color: rgba(255,255,255,.55);
+      font-size: .78rem; font-weight: 700;
+      padding: 5px 14px; cursor: pointer;
+      transition: all .18s; outline: none; white-space: nowrap;
+    }
+    #dim-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+    #dim-btn.active { background: rgba(251,191,36,.15); border-color: #fbbf24; color: #fbbf24; }
+    #dim-slider {
+      flex: 1; max-width: 160px;
+      --fader-color: #fbbf24;
+    }
+    #dim-val { font-size: .7rem; font-weight: 700; color: #fbbf24; min-width: 34px; text-align: right; }
+
+    .stop-btn {
+      width: 100%; padding: 13px; border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+      color: rgba(255,255,255,.35); font-size: .88rem;
+      font-weight: 700; letter-spacing: .5px;
+      cursor: pointer; transition: all .2s; outline: none;
+    }
+    .stop-btn:hover {
+      background: rgba(239,68,68,.1);
+      border-color: rgba(239,68,68,.25);
+      color: #fc8181;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 520px) {
+      h1 { font-size: 2rem; }
+      .sound-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .sound-card { padding: 16px 8px 10px; }
+      .card-icon { font-size: 1.8rem; }
+      .mix-row { grid-template-columns: 20px 64px 1fr 32px; gap: 7px; }
+    }
+    @media (max-width: 380px) {
+      .sound-grid { grid-template-columns: repeat(3, 1fr); }
+      .card-label { font-size: .6rem; }
+    }
+
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      .sound-card.active .card-icon { animation: none; }
+      .sound-card.active .card-pip  { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="screen-wrap">
+<div class="page">
+
+  <header>
+    <h1>Baby Sounds</h1>
+    <p class="subtitle">Soothing sounds for peaceful sleep</p>
+  </header>
+
+  <div class="presets" id="presets-row"></div>
+
+  <div class="sound-grid" id="sound-grid"></div>
+
+  <div class="mixer">
+    <span class="section-label">Mixer</span>
+    <div id="mix-channels"></div>
+  </div>
+
+  <div class="footer">
+    <div class="timer-row">
+      <span class="row-label">Timer</span>
+      <button class="t-btn" data-mins="15">15 min</button>
+      <button class="t-btn" data-mins="30">30 min</button>
+      <button class="t-btn" data-mins="60">1 hour</button>
+      <button class="t-btn" data-mins="0">Off</button>
+      <span class="timer-count" id="timer-count"></span>
+    </div>
+    <div class="dim-row">
+      <span class="row-label">Dim</span>
+      <button id="dim-btn">🌙 Night</button>
+      <input type="range" class="fader" id="dim-slider" min="5" max="100" value="100" style="--fader-color:#fbbf24;background-size:100% 100%" />
+      <span id="dim-val">100%</span>
+    </div>
+    <button class="stop-btn" id="stop-all">Stop All Sounds</button>
+  </div>
+
+</div>
+</div>
+
+<!-- Lives outside #screen-wrap so it stays bright when screen is dimmed -->
+<div id="dim-hint">Tap anywhere to brighten</div>
+
+<script>
+// ─── Constants ───────────────────────────────────────────────────────────────
+const FADE_IN  = 1.5;   // seconds
+const FADE_OUT = 2.0;   // seconds
+
+// ─── Sound definitions ───────────────────────────────────────────────────────
+const SOUNDS = [
+  { id:'white',     label:'White Noise', short:'White',    icon:'〰️', c1:'#22d3ee', c2:'#6366f1' },
+  { id:'pink',      label:'Pink Noise',  short:'Pink',     icon:'🌸', c1:'#f472b6', c2:'#c084fc' },
+  { id:'rain',      label:'Rain',        short:'Rain',     icon:'🌧️', c1:'#60a5fa', c2:'#1d4ed8' },
+  { id:'ocean',     label:'Ocean',       short:'Ocean',    icon:'🌊', c1:'#34d399', c2:'#06b6d4' },
+  { id:'fan',       label:'Fan',         short:'Fan',      icon:'🌀', c1:'#67e8f9', c2:'#0ea5e9' },
+  { id:'shush',     label:'Shushing',    short:'Shush',    icon:'🤫', c1:'#818cf8', c2:'#6d28d9' },
+  { id:'womb',      label:'Womb',        short:'Womb',     icon:'🫀', c1:'#fb7185', c2:'#9f1239' },
+  { id:'heartbeat', label:'Heartbeat',   short:'Heart',    icon:'❤️', c1:'#f87171', c2:'#fb923c', rhythmic:true, bpmMin:40, bpmMax:120 },
+  { id:'lullaby',   label:'Lullaby',     short:'Lullaby',  icon:'🎵', c1:'#facc15', c2:'#fb923c', rhythmic:true, bpmMin:30, bpmMax:90  },
+];
+
+const PRESETS = [
+  { id:'deep-sleep', label:'😴 Deep Sleep', sounds:{ heartbeat:45, pink:55, lullaby:20 } },
+  { id:'nap',        label:'💤 Nap Time',   sounds:{ rain:65, ocean:35 } },
+  { id:'womb-mode',  label:'🫀 Womb',       sounds:{ womb:80, heartbeat:30 } },
+  { id:'clear',      label:'⏹ Clear',       sounds:{} },
+];
+
+// ─── State ───────────────────────────────────────────────────────────────────
+const bpm   = { heartbeat:70, lullaby:56 };
+const vols  = {};  SOUNDS.forEach(s => vols[s.id] = 70);
+let masterVol = 80;
+
+let actx = null, masterGain = null;
+const BUFFERS = {};   // cached noise buffers
+const active  = {};   // id → { gainNode, analyser, stop }
+
+// ─── Audio context ───────────────────────────────────────────────────────────
+function getCtx() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = actx.createGain();
+    masterGain.gain.value = masterVol / 100;
+    masterGain.connect(actx.destination);
+  }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+
+// ─── Buffer generation (called once, results cached) ─────────────────────────
+function initBuffers() {
+  const a = getCtx();
+  if (BUFFERS.white) return;
+
+  // White — 20 s
+  const wb = a.createBuffer(1, a.sampleRate*20, a.sampleRate);
+  const wd = wb.getChannelData(0);
+  for (let i=0;i<wd.length;i++) wd[i]=Math.random()*2-1;
+  BUFFERS.white = wb;
+
+  // Pink — 20 s (Voss-McCartney)
+  const pb = a.createBuffer(1, a.sampleRate*20, a.sampleRate);
+  const pd = pb.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  for (let i=0;i<pd.length;i++) {
+    const w=Math.random()*2-1;
+    b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759;
+    b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856;
+    b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980;
+    pd[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11;
+    b6=w*0.115926;
+  }
+  BUFFERS.pink = pb;
+
+  // Brown — 20 s
+  const brb = a.createBuffer(1, a.sampleRate*20, a.sampleRate);
+  const brd = brb.getChannelData(0);
+  let last=0;
+  for (let i=0;i<brd.length;i++) { last=(last+0.02*(Math.random()*2-1))/1.02; brd[i]=last*3.5; }
+  BUFFERS.brown = brb;
+}
+
+// ─── Start a sound ───────────────────────────────────────────────────────────
+function startSound(id) {
+  initBuffers();
+  const a = getCtx();
+
+  // Per-sound gain (fade-in applied here)
+  const gn = a.createGain();
+  gn.gain.setValueAtTime(0, a.currentTime);
+  gn.gain.linearRampToValueAtTime(vols[id]/100, a.currentTime + FADE_IN);
+
+  // Analyser for the visualizer
+  const analyser = a.createAnalyser();
+  analyser.fftSize = 256;
+  analyser.smoothingTimeConstant = 0.8;
+  gn.connect(analyser);
+  analyser.connect(masterGain);
+
+  let stopFn;
+
+  if (id === 'white') {
+    const src = a.createBufferSource(); src.buffer = BUFFERS.white; src.loop = true;
+    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2000;
+    src.connect(lp); lp.connect(gn); src.start();
+    stopFn = () => { try{src.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'pink') {
+    const src = a.createBufferSource(); src.buffer = BUFFERS.pink; src.loop = true;
+    src.connect(gn); src.start();
+    stopFn = () => { try{src.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'rain') {
+    const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
+    const bp = a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1200; bp.Q.value=0.5;
+    const hp = a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=400;
+    const g2 = a.createGain(); g2.gain.value=1.6;
+    src.connect(bp); bp.connect(hp); hp.connect(g2); g2.connect(gn); src.start();
+    stopFn = () => { try{src.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'ocean') {
+    const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
+    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=700;
+    const lfo = a.createOscillator(); lfo.frequency.value=0.12;
+    const lfoG = a.createGain(); lfoG.gain.value=0.45;
+    const wG  = a.createGain(); wG.gain.value=0.55;
+    lfo.connect(lfoG); lfoG.connect(wG.gain);
+    src.connect(lp); lp.connect(wG); wG.connect(gn);
+    lfo.start(); src.start();
+    stopFn = () => { try{src.stop();lfo.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'fan') {
+    const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
+    const bp = a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=800; bp.Q.value=1.5;
+    // Slow whoosh LFO (fan rotation rhythm)
+    const lfo = a.createOscillator(); lfo.frequency.value=0.4;
+    const lfoG = a.createGain(); lfoG.gain.value=0.25;
+    const wG  = a.createGain(); wG.gain.value=0.65;
+    lfo.connect(lfoG); lfoG.connect(wG.gain);
+    src.connect(bp); bp.connect(wG); wG.connect(gn);
+    lfo.start(); src.start();
+    stopFn = () => { try{src.stop();lfo.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'shush') {
+    const src = a.createBufferSource(); src.buffer = BUFFERS.pink; src.loop = true;
+    const hp = a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200;
+    // Rhythmic shush amplitude modulation ~4 Hz
+    const lfo = a.createOscillator(); lfo.type='sine'; lfo.frequency.value=3.5;
+    const lfoG = a.createGain(); lfoG.gain.value=0.48;
+    const modG = a.createGain(); modG.gain.value=0.52;
+    lfo.connect(lfoG); lfoG.connect(modG.gain);
+    src.connect(hp); hp.connect(modG); modG.connect(gn);
+    lfo.start(); src.start();
+    stopFn = () => { try{src.stop();lfo.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'womb') {
+    // Deep low-freq rumble
+    const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
+    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=120;
+    const lfo = a.createOscillator(); lfo.frequency.value=0.07;
+    const lfoG = a.createGain(); lfoG.gain.value=0.35;
+    const wG  = a.createGain(); wG.gain.value=0.65;
+    lfo.connect(lfoG); lfoG.connect(wG.gain);
+    src.connect(lp); lp.connect(wG); wG.connect(gn);
+    lfo.start(); src.start();
+    // Quiet background heartbeat (fixed 60 BPM — not user-controlled)
+    let wDead = false;
+    const wTids = [];
+    function wBeat(t) {
+      if (wDead) return;
+      const o=a.createOscillator(), g=a.createGain();
+      o.frequency.value=45; o.type='sine';
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(0.22,t+0.03);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.28);
+      o.connect(g); g.connect(gn); o.start(t); o.stop(t+0.32);
+      wTids.push(setTimeout(()=>{ if(!wDead) wBeat(a.currentTime); }, 1000));
+    }
+    wBeat(a.currentTime);
+    stopFn = () => { wDead=true; wTids.forEach(clearTimeout); try{src.stop();lfo.stop()}catch(e){} gn.disconnect(); };
+
+  } else if (id === 'heartbeat') {
+    let dead = false;
+    const tids = [];
+    function beat(t) {
+      if (dead) return;
+      const b    = bpm.heartbeat;
+      const spb  = 60 / b;
+      // Scale envelope with BPM so slow tempos feel natural
+      const decay = Math.min(spb * 0.28, 0.4);
+      // Lub
+      const o1=a.createOscillator(), g1=a.createGain();
+      o1.frequency.value=50; o1.type='sine';
+      g1.gain.setValueAtTime(0,t);
+      g1.gain.linearRampToValueAtTime(0.9,t+0.025);
+      g1.gain.exponentialRampToValueAtTime(0.001,t+decay);
+      o1.connect(g1); g1.connect(gn); o1.start(t); o1.stop(t+decay+0.05);
+      // Dub (relative position within beat)
+      const dubT = t + spb*0.18;
+      const o2=a.createOscillator(), g2=a.createGain();
+      o2.frequency.value=45; o2.type='sine';
+      g2.gain.setValueAtTime(0,dubT);
+      g2.gain.linearRampToValueAtTime(0.7,dubT+0.02);
+      g2.gain.exponentialRampToValueAtTime(0.001,dubT+decay*0.75);
+      o2.connect(g2); g2.connect(gn); o2.start(dubT); o2.stop(dubT+decay);
+      tids.push(setTimeout(()=>{ if(!dead) beat(a.currentTime); }, spb*1000));
+    }
+    beat(a.currentTime);
+    stopFn = () => { dead=true; tids.forEach(clearTimeout); gn.disconnect(); };
+
+  } else if (id === 'lullaby') {
+    let dead = false;
+    const tids = [];
+    const G4=392,A4=440,B4=493.9,C5=523.3,D5=587.3,E5=659.3,F5=698.5,G5=784;
+    const melody = [
+      [G4,.5],[G4,.5],[B4,1],[G4,.5],[B4,.5],[D5,2],
+      [C5,.5],[C5,.5],[E5,1],[C5,.5],[E5,.5],[G5,2],
+      [D5,.5],[D5,.5],[D5,.5],[D5,.5],[D5,1],[B4,1],
+      [G4,.5],[A4,.5],[B4,1],[G4,2],[0,1],
+      [D5,.5],[D5,.5],[F5,1],[D5,.5],[F5,.5],[A4,2],
+      [E5,.5],[E5,.5],[G5,1],[E5,.5],[G5,.5],[B4,2],
+      [D5,.5],[C5,.5],[B4,1],[A4,1],[G4,2],[0,1.5],
+    ];
+    // Reverb IR
+    const irLen = actx.sampleRate*2.5;
+    const ir = actx.createBuffer(2,irLen,actx.sampleRate);
+    for (let c=0;c<2;c++) {
+      const d=ir.getChannelData(c);
+      for (let i=0;i<irLen;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/irLen,2.2);
+    }
+    const rev=actx.createConvolver(); rev.buffer=ir;
+    const revG=actx.createGain(); revG.gain.value=0.32;
+    rev.connect(revG); revG.connect(gn);
+
+    function play(t0) {
+      if (dead) return;
+      const spb = 60/bpm.lullaby;
+      let t=t0;
+      for (const [freq,dur] of melody) {
+        if (freq>0) {
+          const osc=actx.createOscillator(); osc.type='triangle'; osc.frequency.value=freq;
+          const g=actx.createGain(); const nl=dur*spb;
+          g.gain.setValueAtTime(0,t);
+          g.gain.linearRampToValueAtTime(0.38,t+0.06);
+          g.gain.setValueAtTime(0.38,t+nl-0.1);
+          g.gain.linearRampToValueAtTime(0,t+nl);
+          osc.connect(g); g.connect(gn); g.connect(rev);
+          osc.start(t); osc.stop(t+nl+0.05);
+        }
+        t+=dur*spb;
+      }
+      const total=melody.reduce((s,[,d])=>s+d,0)*spb;
+      tids.push(setTimeout(()=>{ if(!dead) play(actx.currentTime); }, (total-0.3)*1000));
+    }
+    play(a.currentTime);
+    stopFn = ()=>{ dead=true; tids.forEach(clearTimeout); gn.disconnect(); };
+  }
+
+  return { gainNode:gn, analyser, stop:stopFn };
+}
+
+// ─── Build UI ─────────────────────────────────────────────────────────────────
+const gridEl    = document.getElementById('sound-grid');
+const mixEl     = document.getElementById('mix-channels');
+const presetsEl = document.getElementById('presets-row');
+
+// Preset buttons
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn';
+  btn.dataset.preset = p.id;
+  btn.textContent = p.label;
+  presetsEl.appendChild(btn);
+});
+
+// Sound cards + mixer rows
+SOUNDS.forEach(s => {
+  // Card
+  const card = document.createElement('button');
+  card.className = 'sound-card';
+  card.id = 'card-' + s.id;
+  card.setAttribute('aria-label', s.label + ' — tap to play');
+  card.style.setProperty('--c1', s.c1);
+  card.style.setProperty('--c2', s.c2);
+  card.innerHTML = `
+    <div class="card-bg"></div>
+    <span class="card-icon" role="img" aria-hidden="true">${s.icon}</span>
+    <span class="card-label">${s.label}</span>
+    <span class="card-pip"></span>
+    <div class="card-viz"><div class="card-viz-bar" id="viz-${s.id}"></div></div>
+  `;
+  card.addEventListener('click', () => toggleSound(s.id));
+  gridEl.appendChild(card);
+
+  // Mixer row
+  const wrap = document.createElement('div');
+  wrap.id = 'mixwrap-' + s.id;
+
+  const pct = vols[s.id];
+  const row = document.createElement('div');
+  row.className = 'mix-row mix-inactive';
+  row.id = 'mixrow-' + s.id;
+  row.style.setProperty('--fader-color', s.c1);
+  row.innerHTML = `
+    <span class="mix-icon" aria-hidden="true">${s.icon}</span>
+    <span class="mix-label">${s.short}</span>
+    <input type="range" class="fader" id="fader-${s.id}"
+           aria-label="${s.label} volume"
+           min="0" max="100" value="${pct}"
+           style="--fader-color:${s.c1};background-size:${pct}% 100%" />
+    <span class="mix-val" id="mixval-${s.id}">${pct}%</span>
+  `;
+  wrap.appendChild(row);
+
+  if (s.rhythmic) {
+    const bpmRow = document.createElement('div');
+    bpmRow.className = 'mix-row';
+    bpmRow.style.gridTemplateColumns = '22px 1fr';
+    const bval = bpm[s.id];
+    const sdef = SOUNDS.find(x=>x.id===s.id);
+    const bPct = ((bval-sdef.bpmMin)/(sdef.bpmMax-sdef.bpmMin)*100).toFixed(1);
+    bpmRow.innerHTML = `
+      <span></span>
+      <div class="bpm-inline" style="--fader-color:${s.c1}">
+        <span class="bpm-track-label">BPM</span>
+        <div class="bpm-stepper">
+          <button class="bpm-btn" aria-label="Decrease ${s.label} BPM" data-id="${s.id}" data-dir="-1">−</button>
+          <span class="bpm-num" id="bpmnum-${s.id}">${bval}</span>
+          <button class="bpm-btn" aria-label="Increase ${s.label} BPM" data-id="${s.id}" data-dir="1">+</button>
+        </div>
+        <input type="range" class="fader bpm-range-slider" id="bpmslider-${s.id}"
+               aria-label="${s.label} BPM"
+               min="${sdef.bpmMin}" max="${sdef.bpmMax}" value="${bval}"
+               style="--fader-color:${s.c1};background-size:${bPct}% 100%" />
+      </div>
+    `;
+    wrap.appendChild(bpmRow);
+  }
+  mixEl.appendChild(wrap);
+});
+
+// Master row
+const masterRow = document.createElement('div');
+masterRow.className = 'mix-row mix-master';
+masterRow.innerHTML = `
+  <span class="mix-icon" aria-hidden="true">🎚️</span>
+  <span class="mix-label">Master</span>
+  <input type="range" class="fader" id="fader-master"
+         aria-label="Master volume"
+         min="0" max="100" value="${masterVol}"
+         style="--fader-color:#c084fc;background-size:${masterVol}% 100%" />
+  <span class="mix-val" id="mixval-master" style="--fader-color:#c084fc">${masterVol}%</span>
+`;
+mixEl.appendChild(masterRow);
+
+// ─── Interactions ─────────────────────────────────────────────────────────────
+function setFaderFill(el, pct) {
+  el.style.backgroundSize = `${pct}% 100%`;
+}
+
+function toggleSound(id) {
+  if (active[id]) {
+    stopSound(id);
+  } else {
+    active[id] = startSound(id);
+    document.getElementById('card-' + id).classList.add('active');
+    document.getElementById('mixrow-' + id).classList.remove('mix-inactive');
+  }
+}
+
+function stopSound(id) {
+  if (!active[id]) return;
+  const { gainNode, stop } = active[id];
+  delete active[id];
+  document.getElementById('card-' + id).classList.remove('active');
+  document.getElementById('mixrow-' + id).classList.add('mix-inactive');
+  // Fade out then disconnect
+  const a = getCtx();
+  gainNode.gain.cancelScheduledValues(a.currentTime);
+  gainNode.gain.setValueAtTime(gainNode.gain.value, a.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0, a.currentTime + FADE_OUT);
+  setTimeout(stop, FADE_OUT * 1000 + 120);
+}
+
+function setChannelVol(id, vol) {
+  vols[id] = vol;
+  const fader = document.getElementById('fader-' + id);
+  const valEl = document.getElementById('mixval-' + id);
+  if (fader) { fader.value = vol; setFaderFill(fader, vol); }
+  if (valEl) valEl.textContent = vol + '%';
+  if (active[id]) active[id].gainNode.gain.value = vol / 100;
+}
+
+// Faders
+SOUNDS.forEach(s => {
+  document.getElementById('fader-' + s.id).addEventListener('input', e => {
+    const v = +e.target.value;
+    vols[s.id] = v;
+    document.getElementById('mixval-' + s.id).textContent = v + '%';
+    setFaderFill(e.target, v);
+    if (active[s.id]) active[s.id].gainNode.gain.value = v / 100;
+  });
+});
+
+document.getElementById('fader-master').addEventListener('input', e => {
+  masterVol = +e.target.value;
+  document.getElementById('mixval-master').textContent = masterVol + '%';
+  setFaderFill(e.target, masterVol);
+  if (masterGain) masterGain.gain.value = masterVol / 100;
+});
+
+// BPM steppers
+document.querySelectorAll('.bpm-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const id = btn.dataset.id;
+    const dir = +btn.dataset.dir;
+    const s = SOUNDS.find(x => x.id === id);
+    bpm[id] = Math.max(s.bpmMin, Math.min(s.bpmMax, bpm[id] + dir));
+    document.getElementById('bpmnum-' + id).textContent = bpm[id];
+    const slider = document.getElementById('bpmslider-' + id);
+    slider.value = bpm[id];
+    setFaderFill(slider, ((bpm[id]-s.bpmMin)/(s.bpmMax-s.bpmMin)*100).toFixed(1));
+  });
+});
+
+// BPM sliders
+SOUNDS.filter(s => s.rhythmic).forEach(s => {
+  document.getElementById('bpmslider-' + s.id).addEventListener('input', e => {
+    bpm[s.id] = +e.target.value;
+    document.getElementById('bpmnum-' + s.id).textContent = bpm[s.id];
+    setFaderFill(e.target, ((bpm[s.id]-s.bpmMin)/(s.bpmMax-s.bpmMin)*100).toFixed(1));
+  });
+});
+
+// Presets
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = PRESETS.find(x => x.id === btn.dataset.preset);
+    // Deactivate all presets visually first
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    if (!p || p.id === 'clear') {
+      Object.keys(active).forEach(stopSound);
+      return;
+    }
+    btn.classList.add('active');
+    // Fade out all current sounds
+    Object.keys(active).forEach(stopSound);
+    // Start preset sounds shortly after (lets fade-out begin)
+    setTimeout(() => {
+      Object.entries(p.sounds).forEach(([id, vol]) => {
+        setChannelVol(id, vol);
+        if (!active[id]) toggleSound(id);
+      });
+    }, 200);
+  });
+});
+
+// Stop all
+document.getElementById('stop-all').addEventListener('click', () => {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  Object.keys(active).forEach(stopSound);
+});
+
+// ─── Timer ────────────────────────────────────────────────────────────────────
+let timerIv = null, timerSecs = 0, activeMins = null;
+
+function setTimer(mins) {
+  clearInterval(timerIv); timerIv = null;
+  document.getElementById('timer-count').textContent = '';
+  document.querySelectorAll('.t-btn').forEach(b => b.classList.remove('active'));
+  if (mins === 0 || activeMins === mins) { activeMins = null; return; }
+  activeMins = mins;
+  document.querySelector(`.t-btn[data-mins="${mins}"]`).classList.add('active');
+  timerSecs = mins * 60;
+  function tick() {
+    timerSecs--;
+    const m = Math.floor(timerSecs/60).toString().padStart(2,'0');
+    const s = (timerSecs%60).toString().padStart(2,'0');
+    document.getElementById('timer-count').textContent = m+':'+s;
+    if (timerSecs <= 0) {
+      clearInterval(timerIv); timerIv = null;
+      document.getElementById('timer-count').textContent = '';
+      document.querySelectorAll('.t-btn').forEach(b => b.classList.remove('active'));
+      activeMins = null;
+      Object.keys(active).forEach(stopSound);
+    }
+  }
+  tick();
+  timerIv = setInterval(tick, 1000);
+}
+document.querySelectorAll('.t-btn').forEach(b => b.addEventListener('click', () => setTimer(+b.dataset.mins)));
+
+// ─── Screen dimmer ────────────────────────────────────────────────────────────
+const screenWrap = document.getElementById('screen-wrap');
+const dimHint    = document.getElementById('dim-hint');
+const dimSlider  = document.getElementById('dim-slider');
+const dimValEl   = document.getElementById('dim-val');
+const dimBtn     = document.getElementById('dim-btn');
+let dimValue = 100;
+
+function setDim(v) {
+  dimValue = v;
+  screenWrap.style.setProperty('--dim', v / 100);
+  setFaderFill(dimSlider, ((v-5)/95*100));
+  dimSlider.value = v;
+  dimValEl.textContent = v + '%';
+  dimBtn.classList.toggle('active', v < 50);
+  dimHint.classList.toggle('visible', v < 35);
+}
+
+dimBtn.addEventListener('click', () => setDim(dimValue > 30 ? 5 : 100));
+dimSlider.addEventListener('input', e => setDim(+e.target.value));
+dimHint.addEventListener('click',   () => setDim(100));
+document.body.addEventListener('click', e => {
+  if (dimValue < 35 && !e.target.closest('#dim-hint') && !e.target.closest('#screen-wrap')) {
+    setDim(100);
+  }
+});
+
+// ─── Visualizer ───────────────────────────────────────────────────────────────
+const vizBuf = new Uint8Array(128);
+
+function drawViz() {
+  requestAnimationFrame(drawViz);
+  SOUNDS.forEach(s => {
+    const bar = document.getElementById('viz-' + s.id);
+    if (!bar) return;
+    const inst = active[s.id];
+    if (inst?.analyser) {
+      inst.analyser.getByteFrequencyData(vizBuf);
+      const avg = vizBuf.slice(0, 64).reduce((a,b)=>a+b,0) / 64;
+      bar.style.transform = `scaleX(${Math.min(avg / 80, 1)})`;
+    } else {
+      bar.style.transform = 'scaleX(0)';
+    }
+  });
+}
+drawViz();
+</script>
+</body>
+</html>
