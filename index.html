@@ -433,6 +433,8 @@ const BUFFERS = {};   // cached noise buffers
 const active  = {};   // id → { gainNode, analyser, stop }
 
 // ─── Audio context ───────────────────────────────────────────────────────────
+let audioUnlocked = false;
+
 function getCtx() {
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -443,6 +445,30 @@ function getCtx() {
   if (actx.state === 'suspended') actx.resume();
   return actx;
 }
+
+// Mobile browsers (especially iOS Safari) require audio to be started from
+// a user gesture. Playing a silent buffer on the first interaction fully
+// unlocks the AudioContext so subsequent programmatic playback works.
+function unlockAudio() {
+  if (audioUnlocked) return;
+  const a = getCtx();
+  const buf = a.createBuffer(1, 1, a.sampleRate);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  src.connect(a.destination);
+  src.start(0);
+  src.onended = () => { audioUnlocked = true; };
+}
+['touchstart', 'touchend', 'click'].forEach(evt =>
+  document.addEventListener(evt, unlockAudio, { once: false, passive: true })
+);
+
+// Resume AudioContext when returning from background / lock screen
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && actx && actx.state === 'suspended') {
+    actx.resume();
+  }
+});
 
 // ─── Buffer generation (called once, results cached) ─────────────────────────
 function initBuffers() {
@@ -687,6 +713,12 @@ SOUNDS.forEach(s => {
     <div class="card-viz"><div class="card-viz-bar" id="viz-${s.id}"></div></div>
   `;
   card.addEventListener('click', () => toggleSound(s.id));
+  // On mobile, respond to touchend for faster feedback and to ensure
+  // the AudioContext unlock happens within the gesture.
+  card.addEventListener('touchend', e => {
+    e.preventDefault();   // prevent duplicate click
+    toggleSound(s.id);
+  }, { passive: false });
   gridEl.appendChild(card);
 
   // Mixer row
