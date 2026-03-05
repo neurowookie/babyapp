@@ -447,20 +447,29 @@ function getCtx() {
 }
 
 // Mobile browsers (especially iOS Safari) require audio to be started from
-// a user gesture. Playing a silent buffer on the first interaction fully
-// unlocks the AudioContext so subsequent programmatic playback works.
+// a user gesture. We create the AudioContext and play a silent buffer on the
+// very first interaction, then pre-generate noise buffers so they're ready
+// before the user taps a sound card.
 function unlockAudio() {
   if (audioUnlocked) return;
+  audioUnlocked = true;  // set immediately to avoid re-entry
   const a = getCtx();
+  // Play a silent buffer to fully unlock the AudioContext on iOS
   const buf = a.createBuffer(1, 1, a.sampleRate);
   const src = a.createBufferSource();
   src.buffer = buf;
   src.connect(a.destination);
   src.start(0);
-  src.onended = () => { audioUnlocked = true; };
+  // Pre-generate noise buffers now so startSound() doesn't have to
+  // do heavy work inside a later gesture (which can miss the gesture window)
+  initBuffers();
+  // Remove all unlock listeners since we're done
+  ['touchstart', 'touchend', 'click'].forEach(evt =>
+    document.removeEventListener(evt, unlockAudio)
+  );
 }
 ['touchstart', 'touchend', 'click'].forEach(evt =>
-  document.addEventListener(evt, unlockAudio, { once: false, passive: true })
+  document.addEventListener(evt, unlockAudio, { passive: true })
 );
 
 // Resume AudioContext when returning from background / lock screen
@@ -713,12 +722,6 @@ SOUNDS.forEach(s => {
     <div class="card-viz"><div class="card-viz-bar" id="viz-${s.id}"></div></div>
   `;
   card.addEventListener('click', () => toggleSound(s.id));
-  // On mobile, respond to touchend for faster feedback and to ensure
-  // the AudioContext unlock happens within the gesture.
-  card.addEventListener('touchend', e => {
-    e.preventDefault();   // prevent duplicate click
-    toggleSound(s.id);
-  }, { passive: false });
   gridEl.appendChild(card);
 
   // Mixer row
