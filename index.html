@@ -459,16 +459,31 @@ function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;  // set immediately to avoid re-entry
 
-  // Switch iOS audio session from "ambient" to "playback" so audio
-  // plays through the speaker regardless of the mute switch.
+  const a = getCtx();
+
+  // Force iOS out of "ambient" audio session into "playback" so audio
+  // routes to the speaker (not just headphones) and ignores the mute switch.
+  // Piping Web Audio through a MediaStream into an <audio> element is the
+  // most reliable way to achieve this.
   try {
-    const silentDataURI = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqpAAAAAAD/+1DEAAAHAAGf9AAAIiMKLr80YAAAABBBR//LOCAIAgGP/4PkHP/B8HwfB8oCAIHJOD5//y4Pn/5cHwfB8HwfKAgCAJ8u/8uD4f/lAfD/+XB8HwfB8HygIAgCfLg+D7////////84PvDCYFBQMKAgMFBx4eCAgOJ2/hAEDg+sHF7f/ygY7/8oKBzsHy4ff/6gHO//WA53/5QDnf/0g5QAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//tQxB4AAAANIH/AAAAAANIH/AAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ';
-    const audio = new Audio(silentDataURI);
-    audio.play().catch(() => {});
+    const streamDest = a.createMediaStreamDestination();
+    const osc = a.createOscillator();
+    const silentGain = a.createGain();
+    silentGain.gain.value = 0;        // silent
+    osc.connect(silentGain);
+    silentGain.connect(streamDest);
+    silentGain.connect(a.destination); // also connect to destination
+    osc.start();
+    const audioEl = document.createElement('audio');
+    audioEl.setAttribute('playsinline', '');
+    audioEl.srcObject = streamDest.stream;
+    audioEl.play().then(() => {
+      // Clean up after a short delay once the session is switched
+      setTimeout(() => { osc.stop(); }, 500);
+    }).catch(() => { try { osc.stop(); } catch(_){} });
   } catch (_) {}
 
-  const a = getCtx();
-  // Play a silent buffer to fully unlock the AudioContext on iOS
+  // Also play a silent buffer for the standard AudioContext unlock
   const buf = a.createBuffer(1, 1, a.sampleRate);
   const src = a.createBufferSource();
   src.buffer = buf;
