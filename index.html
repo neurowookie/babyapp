@@ -556,7 +556,7 @@ function startSound(id) {
 
   if (id === 'white') {
     const src = a.createBufferSource(); src.buffer = BUFFERS.white; src.loop = true;
-    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2000;
+    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=4500;
     src.connect(lp); lp.connect(gn); src.start();
     stopFn = () => { try{src.stop()}catch(e){} gn.disconnect(); };
 
@@ -567,15 +567,15 @@ function startSound(id) {
 
   } else if (id === 'rain') {
     const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
-    const bp = a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1200; bp.Q.value=0.5;
-    const hp = a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=400;
+    const bp = a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1800; bp.Q.value=0.25;
+    const hp = a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=200;
     const g2 = a.createGain(); g2.gain.value=1.6;
     src.connect(bp); bp.connect(hp); hp.connect(g2); g2.connect(gn); src.start();
     stopFn = () => { try{src.stop()}catch(e){} gn.disconnect(); };
 
   } else if (id === 'ocean') {
     const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
-    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=700;
+    const lp = a.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1200; lp.Q.value=0.5;
     const lfo = a.createOscillator(); lfo.frequency.value=0.12;
     const lfoG = a.createGain(); lfoG.gain.value=0.45;
     const wG  = a.createGain(); wG.gain.value=0.55;
@@ -586,7 +586,7 @@ function startSound(id) {
 
   } else if (id === 'fan') {
     const src = a.createBufferSource(); src.buffer = BUFFERS.brown; src.loop = true;
-    const bp = a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=800; bp.Q.value=1.5;
+    const bp = a.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=600; bp.Q.value=0.5;
     // Slow whoosh LFO (fan rotation rhythm)
     const lfo = a.createOscillator(); lfo.frequency.value=0.4;
     const lfoG = a.createGain(); lfoG.gain.value=0.25;
@@ -599,14 +599,23 @@ function startSound(id) {
   } else if (id === 'shush') {
     const src = a.createBufferSource(); src.buffer = BUFFERS.pink; src.loop = true;
     const hp = a.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200;
-    // Rhythmic shush amplitude modulation ~4 Hz
-    const lfo = a.createOscillator(); lfo.type='sine'; lfo.frequency.value=3.5;
-    const lfoG = a.createGain(); lfoG.gain.value=0.48;
-    const modG = a.createGain(); modG.gain.value=0.52;
-    lfo.connect(lfoG); lfoG.connect(modG.gain);
+    const modG = a.createGain(); modG.gain.value=0;
     src.connect(hp); hp.connect(modG); modG.connect(gn);
-    lfo.start(); src.start();
-    stopFn = () => { try{src.stop();lfo.stop()}catch(e){} gn.disconnect(); };
+    src.start();
+    // Scheduled "sh" bursts: sharp attack, quick decay, silence between
+    let shDead = false;
+    const shTids = [];
+    function shBurst(t) {
+      if (shDead) return;
+      modG.gain.cancelScheduledValues(t);
+      modG.gain.setValueAtTime(0, t);
+      modG.gain.linearRampToValueAtTime(1, t + 0.20);   // 200ms attack
+      modG.gain.setValueAtTime(1, t + 0.30);             // brief sustain
+      modG.gain.exponentialRampToValueAtTime(0.001, t + 1.50); // decay
+      shTids.push(setTimeout(() => { if (!shDead) shBurst(a.currentTime); }, 2000));
+    }
+    shBurst(a.currentTime);
+    stopFn = () => { shDead=true; shTids.forEach(clearTimeout); try{src.stop()}catch(e){} gn.disconnect(); };
 
   } else if (id === 'womb') {
     // Deep low-freq rumble
